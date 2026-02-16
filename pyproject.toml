@@ -1,0 +1,10 @@
+[project]
+name = "onsite-prefect"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "prefect[aws,github]>=3.6.17",
+    "pydantic>=2.12.5",
+]

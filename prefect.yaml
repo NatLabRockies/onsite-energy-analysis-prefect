@@ -1,0 +1,25 @@
+# Generic metadata about this project
+name: onsite-energy
+prefect-version: 3.6.17
+
+# pull section allows you to provide instructions for cloning this project in remote locations
+pull:
+  - prefect.deployments.steps.git_clone:
+      repository: https://github.com/NatLabRockies/onsite-energy-analysis-prefect.git
+      branch: main
+
+# the deployments section allows you to provide configuration for deploying flows
+deployments:
+  - name: Onsite Energy Scenario
+    version: null
+    tags: []
+    concurrency_limit: 1
+    description: null
+    entrypoint: main.py:run_scenario
+    parameters: {}
+    work_pool:
+      name: docker-pool
+      work_queue_name: null
+      job_variables: {}
+    schedules: []
+    build: null
