@@ -8,6 +8,7 @@ from prefect import State, flow, get_run_logger, task
 from prefect.client.schemas.objects import FlowRun
 from pydantic import BaseModel, Field
 from prefect.artifacts import create_progress_artifact, update_progress_artifact
+from prefect.runtime import flow_run
 
 MATCH_IDS_PATH = Path(__file__).resolve().parent / "matchIds.csv"
 CHUNK_SIZE = 100
@@ -20,12 +21,38 @@ def get_total_scenarios(match_ids_path: Path = MATCH_IDS_PATH) -> int:
     with match_ids_path.open("r", encoding="utf-8") as f:
         return sum(1 for line in f if line.strip())
 
+
+def run_scenario_flow_run_name() -> str:
+    parameters = flow_run.parameters
+    if isinstance(parameters, dict):
+        config = parameters.get("config", parameters)
+    else:
+        config = parameters
+
+    total_scenarios = get_total_scenarios()
+
+    if isinstance(config, dict):
+        technology = config.get("technology", "unknown")
+        option = config.get("option", "unknown")
+        start_index = config.get("start_index", 1)
+        end_index = config.get("end_index", total_scenarios)
+    else:
+        technology = getattr(config, "technology", "unknown")
+        option = getattr(config, "option", "unknown")
+        start_index = getattr(config, "start_index", 1)
+        end_index = getattr(config, "end_index", total_scenarios)
+
+    technology = getattr(technology, "value", technology)
+    option = getattr(option, "value", option)
+    return f"{technology}, Option {option} ({start_index:,} - {end_index:,})"
+
+
 def crash_handler(flow, flow_run: FlowRun, state: State):  # noqa: ARG001
     print(f"💥 Flow {flow_run.name!r} crashed with state {state!r}")
 
 
-class RunType(str, Enum):
-    lfr = "CSP: Linear Fresnel Collector"
+class Technology(str, Enum):
+    lfr = "CSP: Linear Fresnel Reflector"
     ptc = "CSP: Parabolic Trough Collector"
     pt = "CSP: Power Tower"
     pv = "PV"
@@ -39,8 +66,8 @@ class Option(str, Enum):
 
 
 class Config(BaseModel):
-    run_type: RunType = Field(
-        description="Select the scenario to run",
+    technology: Technology = Field(
+        description="Select the technology to run",
         json_schema_extra={"position": 0},
     )
     option: Option = Field(
@@ -62,14 +89,14 @@ class Config(BaseModel):
 
 @task(task_run_name="Process Chunk: {start_idx:,} - {end_idx:,}")
 def process_chunk(
-    chunk_idx: int,
-    start_idx: int,
-    end_idx: int,
-    total_artifact_id: UUID,
-    total_done_start: int,
-    total_target: int,
-    run_type: str,
-    option: str,
+        chunk_idx: int,
+        start_idx: int,
+        end_idx: int,
+        total_artifact_id: UUID,
+        total_done_start: int,
+        total_target: int,
+        technology: str,
+        option: str,
 ):
     logger = get_run_logger()
     chunk_size = end_idx - start_idx + 1
@@ -84,14 +111,14 @@ def process_chunk(
     total_done = total_done_start
     chunk_done = 0
 
-    if run_type == RunType.pv.value:
+    if technology == Technology.pv.value:
         working_dir = "/onsite-energy-analysis/code/pv_tech_potential"
         script = "run_scenarios_onsite_v2.jl"
-    elif run_type == RunType.wind.value:
+    elif technology == Technology.wind.value:
         working_dir = "/onsite-energy-analysis/code/wind_tech_potential"
         script = "wind_onsite_parallelized.jl"
     else:
-        raise ValueError(f"Unsupported run type for chunk processing: {run_type}")
+        raise ValueError(f"Unsupported run type for chunk processing: {technology}")
 
     client = docker.from_env()
     container = client.containers.run(
@@ -128,8 +155,6 @@ def process_chunk(
             },
         },
         environment={
-            "START_INDEX": str(start_idx),
-            "END_INDEX": str(end_idx),
             "NREL_DEVELOPER_API_KEY": "qpq9xqtFtxbLXd9nhpQ9zaovrGpFb5ynnpfqxL7B",
         },
         detach=True,
@@ -166,6 +191,7 @@ def process_chunk(
 
 @flow(
     name="Run Scenario",
+    flow_run_name=run_scenario_flow_run_name,
     log_prints=True,
     on_crashed=[crash_handler],
 )
@@ -192,10 +218,10 @@ def run_scenario(config: Config):
 
     total_target = end_index - start_index + 1
 
-    if config.run_type not in {RunType.pv.value, RunType.wind.value}:
-        raise ValueError(f"Unimplemented run type: {config.run_type}")
+    if config.technology not in {Technology.pv.value, Technology.wind.value}:
+        raise ValueError(f"Unimplemented run type: {config.technology}")
 
-    logger.info(f"Running {config.run_type!r} scenario with option {config.option!r} and config: {config}")
+    logger.info(f"Running {config.technology!r} scenario with option {config.option!r} and config: {config}")
 
     total_artifact_id: UUID = create_progress_artifact(
         progress=0.0,
@@ -220,7 +246,7 @@ def run_scenario(config: Config):
             total_artifact_id,
             total_done,
             total_target,
-            config.run_type,
+            config.technology,
             config.option,
         ).result()
 

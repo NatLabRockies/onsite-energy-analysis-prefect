@@ -1,6 +1,6 @@
 # Generic metadata about this project
 name: onsite-energy
-prefect-version: 3.6.17
+prefect-version: 3.6.21
 
 # pull section allows you to provide instructions for cloning this project in remote locations
 pull:
