@@ -8,6 +8,7 @@ from prefect import State, flow, get_run_logger, task
 from prefect.client.schemas.objects import FlowRun
 from pydantic import BaseModel, Field
 from prefect.artifacts import create_progress_artifact, update_progress_artifact
+from prefect.runtime import flow_run
 
 MATCH_IDS_PATH = Path(__file__).resolve().parent / "matchIds.csv"
 CHUNK_SIZE = 100
@@ -19,6 +20,32 @@ COMPLETED_RE = re.compile(r"Completed runs number\s+\d+\s*$")
 def get_total_scenarios(match_ids_path: Path = MATCH_IDS_PATH) -> int:
     with match_ids_path.open("r", encoding="utf-8") as f:
         return sum(1 for line in f if line.strip())
+
+
+def run_scenario_flow_run_name() -> str:
+    parameters = flow_run.parameters
+    if isinstance(parameters, dict):
+        config = parameters.get("config", parameters)
+    else:
+        config = parameters
+
+    total_scenarios = get_total_scenarios()
+
+    if isinstance(config, dict):
+        run_type = config.get("run_type", "unknown")
+        option = config.get("option", "unknown")
+        start_index = config.get("start_index", 1)
+        end_index = config.get("end_index", total_scenarios)
+    else:
+        run_type = getattr(config, "run_type", "unknown")
+        option = getattr(config, "option", "unknown")
+        start_index = getattr(config, "start_index", 1)
+        end_index = getattr(config, "end_index", total_scenarios)
+
+    run_type = getattr(run_type, "value", run_type)
+    option = getattr(option, "value", option)
+    return f"{run_type}, Option {option} ({start_index:,} - {end_index:,})"
+
 
 def crash_handler(flow, flow_run: FlowRun, state: State):  # noqa: ARG001
     print(f"💥 Flow {flow_run.name!r} crashed with state {state!r}")
@@ -62,14 +89,14 @@ class Config(BaseModel):
 
 @task(task_run_name="Process Chunk: {start_idx:,} - {end_idx:,}")
 def process_chunk(
-    chunk_idx: int,
-    start_idx: int,
-    end_idx: int,
-    total_artifact_id: UUID,
-    total_done_start: int,
-    total_target: int,
-    run_type: str,
-    option: str,
+        chunk_idx: int,
+        start_idx: int,
+        end_idx: int,
+        total_artifact_id: UUID,
+        total_done_start: int,
+        total_target: int,
+        run_type: str,
+        option: str,
 ):
     logger = get_run_logger()
     chunk_size = end_idx - start_idx + 1
@@ -166,6 +193,7 @@ def process_chunk(
 
 @flow(
     name="Run Scenario",
+    flow_run_name=run_scenario_flow_run_name,
     log_prints=True,
     on_crashed=[crash_handler],
 )
