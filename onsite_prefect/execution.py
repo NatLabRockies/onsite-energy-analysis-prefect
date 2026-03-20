@@ -7,7 +7,7 @@ from uuid import UUID
 
 import docker
 from prefect import get_run_logger, task
-from prefect.artifacts import create_progress_artifact, update_progress_artifact
+from prefect.artifacts import acreate_progress_artifact, aupdate_progress_artifact
 
 from .config import SizingStrategy, Technology
 
@@ -59,7 +59,7 @@ def get_container_spec(technology: Technology) -> ContainerSpec:
 
 
 @task(task_run_name="Process Chunk: {start_idx:,} - {end_idx:,}")
-def process_chunk(
+async def process_chunk(
     chunk_idx: int,
     start_idx: int,
     end_idx: int,
@@ -73,7 +73,7 @@ def process_chunk(
     chunk_size = end_idx - start_idx + 1
 
     chunk_key = f"chunk-progress-{chunk_idx:03d}"
-    chunk_artifact_id = create_progress_artifact(
+    chunk_artifact_id = await acreate_progress_artifact(
         progress=0.0,
         key=chunk_key,
         description=f"Chunk {chunk_idx:,}: 0 / {chunk_size:,} (indices {start_idx:,}-{end_idx:,})",
@@ -116,13 +116,13 @@ def process_chunk(
         total_done += 1
         chunk_done += 1
 
-        update_progress_artifact(
+        await aupdate_progress_artifact(
             artifact_id=total_artifact_id,
             progress=100.0 * total_done / total_target,
             description=f"Total completed: {total_done:,} / {total_target:,}",
         )
 
-        update_progress_artifact(
+        await aupdate_progress_artifact(
             artifact_id=chunk_artifact_id,
             progress=100.0 * chunk_done / chunk_size,
             description=f"Chunk {chunk_idx:,}: {chunk_done:,} / {chunk_size:,} (indices {start_idx:,}-{end_idx:,})",

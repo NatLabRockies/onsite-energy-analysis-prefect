@@ -105,6 +105,14 @@ def get_total_scenarios(technology: Technology) -> int:
     return len(load_match_ids(technology))
 
 
+def get_requested_match_ids(config: Config) -> list[str]:
+    if isinstance(config.sites, Range):
+        start_index, end_index = resolve_range(config)
+        return list(load_match_ids(config.technology)[start_index - 1:end_index])
+
+    return list(config.sites.site_ids)
+
+
 def resolve_range(config: Config) -> tuple[int, int]:
     if not isinstance(config.sites, Range):
         raise TypeError("Range-based site selection is required.")
@@ -136,11 +144,7 @@ def build_flow_run_name(config: Config) -> str:
 
 
 def get_total_target(config: Config) -> int:
-    if isinstance(config.sites, Range):
-        start_index, end_index = resolve_range(config)
-        return end_index - start_index + 1
-
-    return len(config.sites.site_ids)
+    return len(get_requested_match_ids(config))
 
 
 def validate_config(config: Config) -> None:
