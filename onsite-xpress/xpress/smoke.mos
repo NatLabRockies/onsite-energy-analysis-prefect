@@ -1,0 +1,18 @@
+model "xpress_smoke"
+ uses "mmxprs"
+
+ declarations
+   x1, x2: mpvar
+   c1: linctr
+ end-declarations
+
+ x1 is_binary
+ x2 is_binary
+
+ c1 := x1 + x2 <= 1
+
+ maximize(2*x1 + x2)
+
+ writeln("obj=", getobjval)
+ writeln("x1=", getsol(x1), " x2=", getsol(x2))
+end-model

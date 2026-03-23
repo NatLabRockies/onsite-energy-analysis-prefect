@@ -1,5 +1,5 @@
 from .config import Config, Range, SiteID, SizingStrategy, Technology
-from .flow import run_scenario
+from .flows import dispatch_simulations
 
 __all__ = [
     "Config",
@@ -7,5 +7,5 @@ __all__ = [
     "SiteID",
     "SizingStrategy",
     "Technology",
-    "run_scenario",
+    "dispatch_simulations",
 ]

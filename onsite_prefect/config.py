@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from enum import Enum
 from functools import cache
 from pathlib import Path

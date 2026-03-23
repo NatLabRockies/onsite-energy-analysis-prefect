@@ -1,0 +1,59 @@
+license allow-clock-rollback allow-invalid-hostids allow-local-hostids \
+	allow-virtual-hostids expiry="never" features="Hyper OptLib \
+	OptConsole OptJava Barrier Network Quadratic IVE MosRTLib \
+	MosMCLib mmxprs MosConsole BCL Integer Threads=100 ParaMIP=100 \
+	ParaBar=100 MosRTJava MosMCJava BCLJava mmodbc mmoci mmxad" \
+	fico_xpress_release="9.7" hostid="mx004e01fc6761" \
+	platform="win32 win_x86_64 sun_sparc linux_x86 hpux_pa aix_ppc \
+	win_ia64 sun_sparc64 linux_x86_64 linux_ia64 hpux_pa64 \
+	hpux_ia64 aix_rs64 sun_x86_64 macos_x86_64 macos_arm64" \
+	release="2026" static="uncounted" terminal-services sig="9438 \
+	f05c d781 eda5 ce91 cada d0f8 94b3 64dd bf4c b678 2a88 529c \
+	0ac4 f247 1e5a 3696 a3ac 83b1 d042 bf99 ebe5 843e 29ff 9e73 \
+	f39f 7bd7 3446 1b01 d5f5 db0f 44cc"
+
+! FICO Xpress License Server
+! [UserID 0108, OrderID 0565, LicenseID 13542]
+! Created on 13 Jan 2026
+! By NREL, NREL
+! For NREL, NREL
+! Organisation: NREL
+! Title:aswindle-133446-w1
+! Notes:
+!    &lt;xphostid version=&quot;3.5.0&quot; xpress=&quot;9.8&quot;
+!    build=&quot;linux_x86_64&quot;&gt;
+!      &lt;hostid&gt;
+!        &lt;desc&gt;eth0&lt;/desc&gt;
+!        &lt;id&gt;mx004e01fc6761&lt;/id&gt;
+!      &lt;/hostid&gt;
+!    &lt;/xphostid&gt;
+!    
+!    &lt;sysinfo&gt;
+!      &lt;hostname&gt;aswindle-133446-w1&lt;/hostname&gt;
+!      &lt;arch&gt;Intel(R) Xeon(R) w9-3495X&lt;/arch&gt;
+!      &lt;os&gt;Linux version 6.8.0-87-generic (buildd@lcy02-amd64-060)
+!    (x86_64-linux-gnu-gcc-12 (Ubuntu 12.3.0-1ubuntu1~22.04.2) 12.3.0, GNU ld (GNU
+!    Binutils for Ubuntu) 2.38) #88~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue Oct 14
+!    14:03:14 UTC 2&lt;/os&gt;
+!      &lt;cpus&gt;1&lt;/cpus&gt;
+!      &lt;cores&gt;56&lt;/cores&gt;
+!      &lt;virtual-cpus&gt;112&lt;/virtual-cpus&gt;
+!    &lt;/sysinfo&gt;
+!    
+!    &lt;signature&gt;b3c3 a532 c679 e16c 72da fda0 e969 5f0c 4270 afa8 4858 804a
+!      0208 7e1b 0b92 f9eb 0d8d fef4 c976 7f35 128a b218 eb99 a7f1 fa51 dd08
+!      1bcc b088 914f e7e4 0356 44dc&lt;/signature&gt;
+
+! Type: Static
+! Expiry: permanent
+! Release: 9.7
+! Features: 
+!    Optimizer,Mosel,BCL,MIP,Threads,Java,ODBC,OCI,IVE,Console,XAD
+! Platforms: Win32, Win64, Solaris32, Linux32, HPUX32, AIX32, WinIA64,
+! Solaris64, Linux64, LinuxIA64, HPUX64, HPUXIA64, AIX64, SolarisAMD64,
+! MacOSAMD64, MacOSARM64
+! Number of hosts: 1
+! Processes per host: 0
+! Solver threads: 100
+
+! Hostid: mx004e01fc6761		! Customer Lic
