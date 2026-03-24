@@ -1,10 +1,10 @@
+import time
 from collections import Counter
 from itertools import islice
 from typing import Any, Iterable, Iterator
 
 from prefect import State, flow, get_run_logger, task
 from prefect.client.schemas.objects import FlowRun, StateType
-from prefect.futures import wait
 from prefect.runtime import flow_run
 from pydantic import ValidationError
 
@@ -17,7 +17,7 @@ from . import task_storage  # noqa: F401
 from .tasks import run_simulation
 
 DISPATCH_BATCH_SIZE = 100
-TASK_MONITOR_TIMEOUT_SECONDS = 15
+TASK_MONITOR_POLL_SECONDS = 15
 
 
 def dispatch_simulations_flow_run_name() -> str:
@@ -81,25 +81,30 @@ def _wait_for_deferred_tasks(queued_futures: list, logger) -> dict[str, int]:
 
     total = len(queued_futures)
     previous_terminal_count = -1
+    remaining_futures = {future.task_run_id: future for future in queued_futures}
+    terminal_states = {}
 
-    while True:
-        done, not_done = wait(queued_futures, timeout=TASK_MONITOR_TIMEOUT_SECONDS)
-        terminal_count = len(done)
+    while remaining_futures:
+        for task_run_id, future in list(remaining_futures.items()):
+            state = future.state
+            if state is not None and state.is_final():
+                terminal_states[task_run_id] = state
+                del remaining_futures[task_run_id]
+
+        terminal_count = len(terminal_states)
         if terminal_count != previous_terminal_count:
             logger.info(
                 "Task progress: %s/%s terminal, %s remaining.",
                 terminal_count,
                 total,
-                len(not_done),
+                len(remaining_futures),
             )
             previous_terminal_count = terminal_count
 
-        if not not_done:
-            break
+        if remaining_futures:
+            time.sleep(TASK_MONITOR_POLL_SECONDS)
 
-    state_counts = Counter(
-        future.state.type for future in queued_futures if future.state is not None
-    )
+    state_counts = Counter(state.type for state in terminal_states.values())
     completion_summary = {
         "completed": state_counts.get(StateType.COMPLETED, 0),
         "failed": state_counts.get(StateType.FAILED, 0),
