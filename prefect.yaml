@@ -14,3 +14,19 @@ deployments:
       work_queue_name: null
       job_variables: {}
     build: null
+  - name: Task Scheduler Cleanup
+    version: null
+    tags: []
+    description: Daily cleanup of stale Prefect deferred-task parameter blobs in MinIO
+    entrypoint: onsite_prefect/maintenance.py:cleanup_task_scheduler_storage
+    parameters:
+      older_than_days: 3
+    schedules:
+      - cron: 0 3 * * *
+        timezone: America/Denver
+        active: true
+    work_pool:
+      name: julia-pool
+      work_queue_name: null
+      job_variables: {}
+    build: null

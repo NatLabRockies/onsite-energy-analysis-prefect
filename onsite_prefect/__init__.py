@@ -1,5 +1,6 @@
 from .config import Config, Range, SiteID, SizingStrategy, Technology
 from .flows import dispatch_simulations
+from .maintenance import cleanup_task_scheduler_storage
 
 __all__ = [
     "Config",
@@ -8,4 +9,5 @@ __all__ = [
     "SizingStrategy",
     "Technology",
     "dispatch_simulations",
+    "cleanup_task_scheduler_storage",
 ]

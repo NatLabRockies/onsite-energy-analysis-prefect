@@ -3,7 +3,7 @@ from collections import Counter
 from itertools import islice
 from typing import Any, Iterable, Iterator
 
-from prefect import State, flow, get_run_logger, task
+from prefect import State, flow, get_run_logger
 from prefect.client.schemas.objects import FlowRun, StateType
 from prefect.runtime import flow_run
 from pydantic import ValidationError
@@ -37,11 +37,6 @@ def crash_handler(flow, flow_run: FlowRun, state: State):  # noqa: ARG001
     print(f"Flow {flow_run.name!r} crashed with state {state!r}")
 
 
-@task(name="Validate config", task_run_name="Validate config")
-def validate_config(config: Config) -> None:
-    validate_config_data(config)
-
-
 @flow(
     name="dispatch-simulations",
     flow_run_name=dispatch_simulations_flow_run_name,
@@ -51,7 +46,7 @@ def validate_config(config: Config) -> None:
 def dispatch_simulations(config: Config) -> dict[str, Any]:
     logger = get_run_logger()
 
-    validate_config(config)
+    validate_config_data(config)
     site_ids = get_requested_match_ids(config)
     candidate_jobs = build_simulation_jobs(config, site_ids)
     queued_jobs, skipped_jobs = filter_existing_jobs(candidate_jobs)

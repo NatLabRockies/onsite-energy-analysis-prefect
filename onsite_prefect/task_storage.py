@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from urllib.error import HTTPError
 from urllib.parse import quote
 from urllib.request import Request, urlopen

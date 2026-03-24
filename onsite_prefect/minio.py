@@ -1,3 +1,4 @@
+from datetime import datetime
 import mimetypes
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +25,12 @@ class MatchIdFilterResult:
     pending_match_ids: tuple[str, ...]
     existing_match_ids: frozenset[str]
     searched_prefixes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ListedObject:
+    key: str
+    last_modified: datetime
 
 
 def build_object_url(object_key: str) -> str:
@@ -54,7 +61,18 @@ def object_exists(object_key: str) -> bool:
         raise
 
 
-def iter_listed_object_keys(prefix: str) -> Iterator[str]:
+def delete_object(object_key: str) -> bool:
+    request = Request(build_object_url(object_key), method="DELETE")
+    try:
+        with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS):
+            return True
+    except HTTPError as exc:
+        if exc.code == 404:
+            return False
+        raise
+
+
+def iter_listed_objects(prefix: str) -> Iterator[ListedObject]:
     continuation_token: str | None = None
 
     while True:
@@ -62,9 +80,20 @@ def iter_listed_object_keys(prefix: str) -> Iterator[str]:
         with urlopen(request, timeout=HTTP_TIMEOUT_SECONDS) as response:
             root = ElementTree.fromstring(response.read())
 
-        for key_element in root.findall("s3:Contents/s3:Key", LIST_BUCKET_XML_NAMESPACE):
-            if key_element.text:
-                yield key_element.text
+        for contents_element in root.findall("s3:Contents", LIST_BUCKET_XML_NAMESPACE):
+            key = contents_element.findtext("s3:Key", default="", namespaces=LIST_BUCKET_XML_NAMESPACE)
+            last_modified_raw = contents_element.findtext(
+                "s3:LastModified",
+                default="",
+                namespaces=LIST_BUCKET_XML_NAMESPACE,
+            )
+            if not key or not last_modified_raw:
+                continue
+
+            yield ListedObject(
+                key=key,
+                last_modified=datetime.fromisoformat(last_modified_raw.replace("Z", "+00:00")),
+            )
 
         is_truncated = (
             root.findtext("s3:IsTruncated", default="false", namespaces=LIST_BUCKET_XML_NAMESPACE) == "true"
@@ -77,6 +106,11 @@ def iter_listed_object_keys(prefix: str) -> Iterator[str]:
 
         if not is_truncated or not continuation_token:
             return
+
+
+def iter_listed_object_keys(prefix: str) -> Iterator[str]:
+    for listed_object in iter_listed_objects(prefix):
+        yield listed_object.key
 
 
 def filter_existing_match_ids(
