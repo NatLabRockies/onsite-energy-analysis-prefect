@@ -11,6 +11,7 @@ from prefect.client.orchestration import get_client
 from prefect.client.schemas.objects import StateType
 from prefect.context import get_run_context
 from prefect.exceptions import ObjectNotFound
+from prefect.states import Cancelled, Completed, Failed, Running
 
 from .command_builder import iter_local_result_files, remove_local_result_files, result_key_for_local_file
 from .jobs import SimulationJob, SimulationResult
@@ -53,6 +54,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     )
 
     if not job.overwrite_existing_results and job_has_existing_remote_result(job):
+        await _persist_current_task_run_state(
+            Completed(message=f"Skipped site_id={job.site_id} because results already exist in MinIO."),
+            logger,
+        )
         logger.info("Skipping site_id=%s because results already exist in MinIO.", job.site_id)
         return SimulationResult(
             site_id=job.site_id,
@@ -71,6 +76,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
             job.site_id,
         )
 
+    await _persist_current_task_run_state(
+        Running(message=f"Simulation started for site_id={job.site_id}."),
+        logger,
+    )
     process = await _start_simulation_process(job)
     _register_active_process_group(process.pid, job.site_id)
 
@@ -87,6 +96,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     try:
         return_code = await process.wait()
     except asyncio.CancelledError:
+        await _persist_current_task_run_state(
+            Cancelled(message=f"Simulation cancelled for site_id={job.site_id}."),
+            logger,
+        )
         await _terminate_subprocess(
             process,
             logger,
@@ -95,6 +108,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
         )
         raise
     except BaseException:
+        await _persist_current_task_run_state(
+            Failed(message=f"Simulation crashed for site_id={job.site_id}."),
+            logger,
+        )
         await _terminate_subprocess(
             process,
             logger,
@@ -111,6 +128,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     duration_seconds = time.monotonic() - started_at
     if monitor_stop_reason is not None:
         remove_local_result_files(job)
+        await _persist_current_task_run_state(
+            Cancelled(message=f"Simulation stopped for site_id={job.site_id}: {monitor_stop_reason}."),
+            logger,
+        )
         logger.warning(
             "Simulation stopped for site_id=%s because %s.",
             job.site_id,
@@ -120,11 +141,19 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
 
     if return_code != 0:
         remove_local_result_files(job)
+        await _persist_current_task_run_state(
+            Failed(message=f"Simulation failed for site_id={job.site_id} with return code {return_code}."),
+            logger,
+        )
         logger.error("Simulation failed for site_id=%s with return code %s.", job.site_id, return_code)
         raise RuntimeError(f"Simulation failed for {job.site_id} with return code {return_code}")
 
     local_result_files = iter_local_result_files(job)
     if not local_result_files:
+        await _persist_current_task_run_state(
+            Completed(message=f"Simulation completed for site_id={job.site_id} without result files."),
+            logger,
+        )
         logger.info("Simulation completed for site_id=%s without result files.", job.site_id)
         return SimulationResult(
             site_id=job.site_id,
@@ -143,6 +172,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
         uploaded_count += 1
 
     remove_local_result_files(job)
+    await _persist_current_task_run_state(
+        Completed(message=f"Simulation completed for site_id={job.site_id} with {uploaded_count} uploaded result file(s)."),
+        logger,
+    )
     logger.info(
         "Simulation completed for site_id=%s with %s uploaded result file(s).",
         job.site_id,
@@ -343,6 +376,31 @@ def _process_exists(process_group_id: int) -> bool:
         return True
     except ProcessLookupError:
         return False
+
+
+async def _persist_current_task_run_state(state, logger) -> None:
+    run_context = get_run_context()
+    task_run_id = run_context.task_run.id
+
+    try:
+        async with get_client() as client:
+            await client.set_task_run_state(
+                task_run_id=task_run_id,
+                state=state,
+                force=True,
+            )
+    except ObjectNotFound:
+        logger.warning(
+            "Skipped persisting task state %s because task_run_id=%s no longer exists.",
+            state.name,
+            task_run_id,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to persist task state %s for task_run_id=%s.",
+            state.name,
+            task_run_id,
+        )
 
 
 # Use a stable task key so flow workers and task workers can coordinate across
