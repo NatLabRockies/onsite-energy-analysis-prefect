@@ -11,6 +11,7 @@ services:
       PREFECT_TASK_WORKER_LIMIT: ${PREFECT_TASK_WORKER_LIMIT:-108}
       PREFECT_TASKS_SCHEDULING_DEFAULT_STORAGE_BLOCK: ${PREFECT_TASKS_SCHEDULING_DEFAULT_STORAGE_BLOCK:-onsite-minio-proxy-storage/onsite-task-scheduling}
       NREL_DEVELOPER_API_KEY: ${NREL_DEVELOPER_API_KEY:-}
+      ONSITE_CAPTURE_JULIA_OUTPUT: ${ONSITE_CAPTURE_JULIA_OUTPUT:-true}
       ONSITE_PROJECT_ROOT: /onsite-energy-analysis
     volumes:
       - ${ONSITE_HOST_REPO_PATH:-/home/aswindle/docker/onsite-energy/onsite-energy-analysis}:/onsite-energy-analysis
