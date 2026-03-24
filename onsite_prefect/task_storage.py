@@ -21,6 +21,9 @@ class OnsiteMinioProxyStorage(WritableFileSystem):
     bucket_url: str = MINIO_RESULTS_BUCKET_URL
     key_prefix: str = TASK_SCHEDULING_STORAGE_PREFIX
 
+    def _event_method_called_resources(self):
+        return None
+
     def _build_object_key(self, path: str) -> str:
         normalized_path = path.strip().lstrip("/")
         if not normalized_path:

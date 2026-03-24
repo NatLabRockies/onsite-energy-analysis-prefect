@@ -23,12 +23,7 @@ PROCESS_TERMINATION_GRACE_SECONDS = float(
     os.environ.get("ONSITE_PROCESS_TERMINATION_GRACE_SECONDS", "10")
 )
 STOP_STATE_TYPES = {StateType.CANCELLING, StateType.CANCELLED}
-CAPTURE_JULIA_OUTPUT = os.environ.get("ONSITE_CAPTURE_JULIA_OUTPUT", "true").strip().lower() in {
-    "1",
-    "true",
-    "yes",
-    "on",
-}
+JULIA_LOG_CHUNK_BYTES = 65_536
 
 _ACTIVE_PROCESS_GROUPS: dict[int, str] = {}
 _ACTIVE_PROCESS_GROUPS_LOCK = threading.Lock()
@@ -44,6 +39,7 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     logger = get_run_logger()
     host = socket.gethostname()
     started_at = time.monotonic()
+    await _persist_current_task_run_name(job, logger)
 
     logger.info(
         "Starting simulation for site_id=%s technology=%s option=%s host=%s",
@@ -83,14 +79,8 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     process = await _start_simulation_process(job)
     _register_active_process_group(process.pid, job.site_id)
 
-    stream_tasks: list[asyncio.Task[None]] = []
-    if CAPTURE_JULIA_OUTPUT:
-        stream_tasks.append(
-            asyncio.create_task(_stream_pipe(process.stdout, logger.info, job.site_id, "stdout"))
-        )
-        stream_tasks.append(
-            asyncio.create_task(_stream_pipe(process.stderr, logger.warning, job.site_id, "stderr"))
-        )
+    stdout_capture_task = asyncio.create_task(_capture_pipe(process.stdout))
+    stderr_capture_task = asyncio.create_task(_capture_pipe(process.stderr))
     monitor_task = asyncio.create_task(_monitor_run_lifecycle(process, logger, job))
 
     try:
@@ -121,9 +111,15 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
         raise
     finally:
         monitor_stop_reason = await _drain_monitor_task(monitor_task)
-        if stream_tasks:
-            await asyncio.gather(*stream_tasks, return_exceptions=True)
+        stdout_output, stderr_output = await asyncio.gather(
+            stdout_capture_task,
+            stderr_capture_task,
+            return_exceptions=False,
+        )
         _unregister_active_process_group(process.pid)
+
+    _log_captured_output(logger, job.site_id, "stdout", stdout_output, is_error=False)
+    _log_captured_output(logger, job.site_id, "stderr", stderr_output, is_error=True)
 
     duration_seconds = time.monotonic() - started_at
     if monitor_stop_reason is not None:
@@ -151,7 +147,10 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     local_result_files = iter_local_result_files(job)
     if not local_result_files:
         await _persist_current_task_run_state(
-            Completed(message=f"Simulation completed for site_id={job.site_id} without result files."),
+            Completed(
+                name="Skipped",
+                message=f"Simulation completed for site_id={job.site_id} without result files.",
+            ),
             logger,
         )
         logger.info("Simulation completed for site_id=%s without result files.", job.site_id)
@@ -195,8 +194,8 @@ async def _start_simulation_process(job: SimulationJob) -> asyncio.subprocess.Pr
     popen_kwargs = {
         "cwd": job.working_directory,
         "env": {**os.environ, **job.environment},
-        "stdout": asyncio.subprocess.PIPE if CAPTURE_JULIA_OUTPUT else asyncio.subprocess.DEVNULL,
-        "stderr": asyncio.subprocess.PIPE if CAPTURE_JULIA_OUTPUT else asyncio.subprocess.DEVNULL,
+        "stdout": asyncio.subprocess.PIPE,
+        "stderr": asyncio.subprocess.PIPE,
     }
     if os.name == "posix":
         popen_kwargs["start_new_session"] = True
@@ -207,23 +206,50 @@ async def _start_simulation_process(job: SimulationJob) -> asyncio.subprocess.Pr
     )
 
 
-async def _stream_pipe(
-    pipe: asyncio.StreamReader | None,
-    log_function,
+async def _capture_pipe(pipe: asyncio.StreamReader | None) -> str:
+    if pipe is None:
+        return ""
+
+    captured = await pipe.read()
+    return captured.decode("utf-8", errors="replace")
+
+
+def _log_captured_output(
+    logger,
     site_id: str,
     stream_name: str,
+    output: str,
+    *,
+    is_error: bool,
 ) -> None:
-    if pipe is None:
+    stripped_output = output.strip()
+    if not stripped_output:
         return
 
-    while True:
-        line = await pipe.readline()
-        if not line:
-            return
+    log_function = logger.warning if is_error else logger.info
+    encoded_output = stripped_output.encode("utf-8")
+    if len(encoded_output) <= JULIA_LOG_CHUNK_BYTES:
+        log_function("[%s][%s]\n%s", site_id, stream_name, stripped_output)
+        return
 
-        message = line.decode("utf-8", errors="replace").rstrip()
-        if message:
-            log_function("[%s][%s] %s", site_id, stream_name, message)
+    chunk_count = (len(encoded_output) + JULIA_LOG_CHUNK_BYTES - 1) // JULIA_LOG_CHUNK_BYTES
+    for index, chunk in enumerate(_chunk_bytes(encoded_output, JULIA_LOG_CHUNK_BYTES), start=1):
+        message = chunk.decode("utf-8", errors="replace")
+        log_function(
+            "[%s][%s][chunk %s/%s]\n%s",
+            site_id,
+            stream_name,
+            index,
+            chunk_count,
+            message,
+        )
+
+
+def _chunk_bytes(content: bytes, chunk_size: int) -> list[bytes]:
+    return [
+        content[index:index + chunk_size]
+        for index in range(0, len(content), chunk_size)
+    ]
 
 
 async def _monitor_run_lifecycle(
@@ -376,6 +402,31 @@ def _process_exists(process_group_id: int) -> bool:
         return True
     except ProcessLookupError:
         return False
+
+
+def _build_task_run_name(job: SimulationJob) -> str:
+    return f"run-simulation {job.technology.name} {job.sizing_strategy.cli_value} {job.site_id}"
+
+
+async def _persist_current_task_run_name(job: SimulationJob, logger) -> None:
+    run_context = get_run_context()
+    task_run_id = run_context.task_run.id
+    task_run_name = _build_task_run_name(job)
+
+    try:
+        async with get_client() as client:
+            await client.set_task_run_name(task_run_id=task_run_id, name=task_run_name)
+    except ObjectNotFound:
+        logger.warning(
+            "Skipped renaming task_run_id=%s because it no longer exists.",
+            task_run_id,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to rename task_run_id=%s to %r.",
+            task_run_id,
+            task_run_name,
+        )
 
 
 async def _persist_current_task_run_state(state, logger) -> None:
