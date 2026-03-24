@@ -9,6 +9,7 @@ services:
       PREFECT_API_URL: ${PREFECT_API_URL:-http://bball-130449.nrel.gov:4200/api}
       PREFECT_WORK_POOL: ${PREFECT_WORK_POOL:-julia-pool}
       PREFECT_TASK_WORKER_LIMIT: ${PREFECT_TASK_WORKER_LIMIT:-108}
+      PREFECT_TASKS_SCHEDULING_DEFAULT_STORAGE_BLOCK: ${PREFECT_TASKS_SCHEDULING_DEFAULT_STORAGE_BLOCK:-onsite-minio-proxy-storage/onsite-task-scheduling}
       NREL_DEVELOPER_API_KEY: ${NREL_DEVELOPER_API_KEY:-}
       ONSITE_PROJECT_ROOT: /onsite-energy-analysis
     volumes:

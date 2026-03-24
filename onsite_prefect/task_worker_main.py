@@ -1,17 +1,15 @@
-import os
 import asyncio
+import os
 
 from prefect.task_worker import TaskWorker
 
+from .task_storage import OnsiteMinioProxyStorage
 from .tasks import RUN_SIMULATION_TASK_KEY, run_simulation
 
 
 def _configure_task_worker(limit: int) -> TaskWorker:
     worker = TaskWorker(run_simulation, limit=limit)
 
-    # Prefect's TaskWorker clones served tasks with `with_options(...)`, which
-    # regenerates the default code-hash task key. Reapply the explicit stable key
-    # to the internal served task copy so subscription and lookup use the same key.
     for task in worker.tasks:
         task.task_key = RUN_SIMULATION_TASK_KEY
 

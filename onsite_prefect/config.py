@@ -63,7 +63,7 @@ class Config(BaseModel):
         json_schema_extra={"position": 1},
     )
     overwrite_existing_results: bool = Field(
-        default=True,
+        default=False,
         json_schema_extra={"position": 2},
     )
     sites: Range | SiteID = Field(

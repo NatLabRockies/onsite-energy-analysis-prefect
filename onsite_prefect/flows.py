@@ -1,8 +1,10 @@
+from collections import Counter
 from itertools import islice
 from typing import Any, Iterable, Iterator
 
 from prefect import State, flow, get_run_logger, task
-from prefect.client.schemas.objects import FlowRun
+from prefect.client.schemas.objects import FlowRun, StateType
+from prefect.futures import wait
 from prefect.runtime import flow_run
 from pydantic import ValidationError
 
@@ -11,9 +13,11 @@ from .config import Config, build_flow_run_name, coerce_config, validate_config 
     get_requested_match_ids
 from .jobs import SimulationJob
 from .minio import filter_existing_jobs
+from . import task_storage  # noqa: F401
 from .tasks import run_simulation
 
 DISPATCH_BATCH_SIZE = 100
+TASK_MONITOR_TIMEOUT_SECONDS = 15
 
 
 def dispatch_simulations_flow_run_name() -> str:
@@ -52,8 +56,10 @@ def dispatch_simulations(config: Config) -> dict[str, Any]:
     candidate_jobs = build_simulation_jobs(config, site_ids)
     queued_jobs, skipped_jobs = filter_existing_jobs(candidate_jobs)
 
+    queued_futures = []
     for batch_number, job_batch in enumerate(_batched(queued_jobs, DISPATCH_BATCH_SIZE), start=1):
-        run_simulation.map(job_batch, deferred=True)
+        batch_futures = run_simulation.map(job_batch, deferred=True)
+        queued_futures.extend(batch_futures)
         logger.info("Queued batch %s containing %s task run(s).", batch_number, len(job_batch))
 
     summary = {
@@ -63,7 +69,48 @@ def dispatch_simulations(config: Config) -> dict[str, Any]:
         "config": config.model_dump(mode="json", exclude_defaults=True),
     }
     logger.info("Dispatch summary: %s", summary)
+
+    completion_summary = _wait_for_deferred_tasks(queued_futures, logger)
+    summary["task_completion"] = completion_summary
     return summary
+
+
+def _wait_for_deferred_tasks(queued_futures: list, logger) -> dict[str, int]:
+    if not queued_futures:
+        return {"completed": 0, "failed": 0, "cancelled": 0, "crashed": 0}
+
+    total = len(queued_futures)
+    previous_terminal_count = -1
+
+    while True:
+        done, not_done = wait(queued_futures, timeout=TASK_MONITOR_TIMEOUT_SECONDS)
+        terminal_count = len(done)
+        if terminal_count != previous_terminal_count:
+            logger.info(
+                "Task progress: %s/%s terminal, %s remaining.",
+                terminal_count,
+                total,
+                len(not_done),
+            )
+            previous_terminal_count = terminal_count
+
+        if not not_done:
+            break
+
+    state_counts = Counter(
+        future.state.type for future in queued_futures if future.state is not None
+    )
+    completion_summary = {
+        "completed": state_counts.get(StateType.COMPLETED, 0),
+        "failed": state_counts.get(StateType.FAILED, 0),
+        "cancelled": state_counts.get(StateType.CANCELLED, 0),
+        "crashed": state_counts.get(StateType.CRASHED, 0),
+    }
+
+    if completion_summary["failed"] or completion_summary["cancelled"] or completion_summary["crashed"]:
+        logger.warning("One or more simulation tasks did not complete successfully: %s", completion_summary)
+
+    return completion_summary
 
 
 def _batched(items: Iterable[SimulationJob], batch_size: int) -> Iterator[list[SimulationJob]]:
