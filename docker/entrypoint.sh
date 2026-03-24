@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PREFECT_API_URL="${PREFECT_API_URL%/}"
+export PREFECT_API_URL
+
 PREFECT_WORK_POOL="${PREFECT_WORK_POOL:-julia-pool}"
 FLOW_WORKER_NAME="${PREFECT_FLOW_WORKER_NAME:-$(hostname)-flow}"
 TASK_WORKER_NAME="${PREFECT_TASK_WORKER_NAME:-$(hostname)-task}"

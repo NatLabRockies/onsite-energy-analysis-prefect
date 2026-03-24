@@ -10,6 +10,8 @@ from .command_builder import iter_local_result_files, remove_local_result_files,
 from .jobs import SimulationJob, SimulationResult
 from .minio import job_has_existing_remote_result, upload_result_file
 
+RUN_SIMULATION_TASK_KEY = "run_simulation"
+
 
 @task(
     name="run-simulation",
@@ -130,3 +132,8 @@ def _stream_pipe(pipe, log_function, site_id: str, stream_name: str) -> None:
                 log_function("[%s][%s] %s", site_id, stream_name, message)
     finally:
         pipe.close()
+
+
+# Use a stable task key so flow workers and task workers can coordinate across
+# rebuilds without relying on Prefect's code-hash-based default.
+run_simulation.task_key = RUN_SIMULATION_TASK_KEY

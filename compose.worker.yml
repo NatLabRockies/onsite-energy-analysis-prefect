@@ -6,7 +6,7 @@ services:
     mac_address: ${ONSITE_WORKER_MAC_ADDRESS:?Set ONSITE_WORKER_MAC_ADDRESS for this worker host}
     restart: unless-stopped
     environment:
-      PREFECT_API_URL: ${PREFECT_API_URL:-http://bball-130449.nrel.gov:4200/api/}
+      PREFECT_API_URL: ${PREFECT_API_URL:-http://bball-130449.nrel.gov:4200/api}
       PREFECT_WORK_POOL: ${PREFECT_WORK_POOL:-julia-pool}
       PREFECT_TASK_WORKER_LIMIT: ${PREFECT_TASK_WORKER_LIMIT:-108}
       NREL_DEVELOPER_API_KEY: ${NREL_DEVELOPER_API_KEY:-}
