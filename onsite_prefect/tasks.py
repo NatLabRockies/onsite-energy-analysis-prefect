@@ -51,7 +51,7 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
 
     if not job.overwrite_existing_results and job_has_existing_remote_result(job):
         await _persist_current_task_run_state(
-            Completed(message=f"Skipped site_id={job.site_id} because results already exist in MinIO."),
+            Cancelled(message=f"Skipped site_id={job.site_id} because results already exist in MinIO."),
             logger,
         )
         logger.info("Skipping site_id=%s because results already exist in MinIO.", job.site_id)
@@ -147,8 +147,7 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     local_result_files = iter_local_result_files(job)
     if not local_result_files:
         await _persist_current_task_run_state(
-            Completed(
-                name="Skipped",
+            Cancelled(
                 message=f"Simulation completed for site_id={job.site_id} without result files.",
             ),
             logger,

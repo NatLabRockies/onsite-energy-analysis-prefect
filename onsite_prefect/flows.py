@@ -4,6 +4,9 @@ from itertools import islice
 from typing import Any, Iterable, Iterator
 
 from prefect import State, flow, get_run_logger
+from prefect.client.orchestration import get_client
+from prefect.client.schemas.filters import TaskRunFilter, TaskRunFilterFlowRunId, TaskRunFilterState, \
+    TaskRunFilterStateType
 from prefect.client.schemas.objects import FlowRun, StateType
 from prefect.runtime import flow_run
 from pydantic import ValidationError
@@ -65,41 +68,42 @@ def dispatch_simulations(config: Config) -> dict[str, Any]:
     }
     logger.info("Dispatch summary: %s", summary)
 
-    completion_summary = _wait_for_deferred_tasks(queued_futures, logger)
+    completion_summary = _wait_for_deferred_tasks(flow_run.id, len(queued_futures), logger)
     summary["task_completion"] = completion_summary
     return summary
 
 
-def _wait_for_deferred_tasks(queued_futures: list, logger) -> dict[str, int]:
-    if not queued_futures:
+def _wait_for_deferred_tasks(current_flow_run_id: str | None, total_queued_tasks: int, logger) -> dict[str, int]:
+    if total_queued_tasks == 0:
         return {"completed": 0, "failed": 0, "cancelled": 0, "crashed": 0}
+    if current_flow_run_id is None:
+        raise ValueError("Current flow run id is unavailable for deferred task monitoring.")
 
-    total = len(queued_futures)
     previous_terminal_count = -1
-    remaining_futures = {future.task_run_id: future for future in queued_futures}
-    terminal_states = {}
 
-    while remaining_futures:
-        for task_run_id, future in list(remaining_futures.items()):
-            state = future.state
-            if state is not None and state.is_final():
-                terminal_states[task_run_id] = state
-                del remaining_futures[task_run_id]
+    while True:
+        state_counts = _read_task_run_state_counts(current_flow_run_id)
+        terminal_count = sum(
+            state_counts.get(state_type, 0)
+            for state_type in (StateType.COMPLETED, StateType.FAILED, StateType.CANCELLED, StateType.CRASHED)
+        )
 
-        terminal_count = len(terminal_states)
         if terminal_count != previous_terminal_count:
             logger.info(
-                "Task progress: %s/%s terminal, %s remaining.",
+                "Task progress: %s/%s terminal, running=%s pending=%s scheduled=%s.",
                 terminal_count,
-                total,
-                len(remaining_futures),
+                total_queued_tasks,
+                state_counts.get(StateType.RUNNING, 0),
+                state_counts.get(StateType.PENDING, 0),
+                state_counts.get(StateType.SCHEDULED, 0),
             )
             previous_terminal_count = terminal_count
 
-        if remaining_futures:
-            time.sleep(TASK_MONITOR_POLL_SECONDS)
+        if terminal_count >= total_queued_tasks:
+            break
 
-    state_counts = Counter(state.type for state in terminal_states.values())
+        time.sleep(TASK_MONITOR_POLL_SECONDS)
+
     completion_summary = {
         "completed": state_counts.get(StateType.COMPLETED, 0),
         "failed": state_counts.get(StateType.FAILED, 0),
@@ -107,10 +111,49 @@ def _wait_for_deferred_tasks(queued_futures: list, logger) -> dict[str, int]:
         "crashed": state_counts.get(StateType.CRASHED, 0),
     }
 
-    if completion_summary["failed"] or completion_summary["cancelled"] or completion_summary["crashed"]:
+    if completion_summary["failed"] or completion_summary["crashed"]:
         logger.warning("One or more simulation tasks did not complete successfully: %s", completion_summary)
+    elif completion_summary["cancelled"]:
+        logger.info("One or more simulation tasks were intentionally skipped or cancelled: %s", completion_summary)
 
     return completion_summary
+
+
+def _read_task_run_state_counts(current_flow_run_id: str) -> Counter[StateType]:
+    state_counts: Counter[StateType] = Counter()
+    monitored_state_types = (
+        StateType.RUNNING,
+        StateType.PENDING,
+        StateType.SCHEDULED,
+        StateType.COMPLETED,
+        StateType.FAILED,
+        StateType.CANCELLED,
+        StateType.CRASHED,
+    )
+
+    with get_client(sync_client=True) as client:
+        for state_type in monitored_state_types:
+            state_counts[state_type] = _count_task_runs(
+                client,
+                current_flow_run_id,
+                state_type,
+            )
+
+    return state_counts
+
+
+def _count_task_runs(client, current_flow_run_id: str, state_type: StateType) -> int:
+    body = {
+        "task_runs": TaskRunFilter(
+            flow_run_id=TaskRunFilterFlowRunId(any_=[current_flow_run_id]),
+            state=TaskRunFilterState(
+                type=TaskRunFilterStateType(any_=[state_type]),
+                name=None,
+            ),
+        ).model_dump(mode="json", exclude_unset=True, exclude_none=True),
+    }
+    response = client._client.post("/task_runs/count", json=body)  # noqa: SLF001
+    return int(response.json())
 
 
 def _batched(items: Iterable[SimulationJob], batch_size: int) -> Iterator[list[SimulationJob]]:
