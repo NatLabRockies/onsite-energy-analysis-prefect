@@ -5,6 +5,6 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
-    "prefect[aws,github]>=3.6.17",
+    "prefect[aws,github]>=3.6.23",
     "pydantic>=2.12.5",
 ]
