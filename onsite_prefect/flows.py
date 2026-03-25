@@ -4,6 +4,7 @@ from itertools import islice
 from typing import Any, Iterable, Iterator
 
 from prefect import State, flow, get_run_logger
+from prefect.artifacts import create_progress_artifact, update_progress_artifact
 from prefect.client.orchestration import get_client
 from prefect.client.schemas.filters import TaskRunFilter, TaskRunFilterFlowRunId, TaskRunFilterState, \
     TaskRunFilterStateType
@@ -68,12 +69,27 @@ def dispatch_simulations(config: Config) -> dict[str, Any]:
     }
     logger.info("Dispatch summary: %s", summary)
 
-    completion_summary = _wait_for_deferred_tasks(flow_run.id, len(queued_futures), logger)
+    progress_artifact_id = create_progress_artifact(
+        progress=_calculate_progress_percent(0, len(queued_futures)),
+        description=_build_progress_description(0, len(queued_futures)),
+    )
+
+    completion_summary = _wait_for_deferred_tasks(
+        flow_run.id,
+        len(queued_futures),
+        progress_artifact_id,
+        logger,
+    )
     summary["task_completion"] = completion_summary
     return summary
 
 
-def _wait_for_deferred_tasks(current_flow_run_id: str | None, total_queued_tasks: int, logger) -> dict[str, int]:
+def _wait_for_deferred_tasks(
+    current_flow_run_id: str | None,
+    total_queued_tasks: int,
+    progress_artifact_id,
+    logger,
+) -> dict[str, int]:
     if total_queued_tasks == 0:
         return {"completed": 0, "failed": 0, "cancelled": 0, "crashed": 0}
     if current_flow_run_id is None:
@@ -97,6 +113,11 @@ def _wait_for_deferred_tasks(current_flow_run_id: str | None, total_queued_tasks
                 state_counts.get(StateType.PENDING, 0),
                 state_counts.get(StateType.SCHEDULED, 0),
             )
+            update_progress_artifact(
+                artifact_id=progress_artifact_id,
+                progress=_calculate_progress_percent(terminal_count, total_queued_tasks),
+                description=_build_progress_description(terminal_count, total_queued_tasks),
+            )
             previous_terminal_count = terminal_count
 
         if terminal_count >= total_queued_tasks:
@@ -117,6 +138,16 @@ def _wait_for_deferred_tasks(current_flow_run_id: str | None, total_queued_tasks
         logger.info("One or more simulation tasks were intentionally skipped or cancelled: %s", completion_summary)
 
     return completion_summary
+
+
+def _calculate_progress_percent(completed_count: int, total_count: int) -> float:
+    if total_count <= 0:
+        return 100.0
+    return (completed_count / total_count) * 100.0
+
+
+def _build_progress_description(completed_count: int, total_count: int) -> str:
+    return f"Completed simulations: {completed_count}/{total_count}"
 
 
 def _read_task_run_state_counts(current_flow_run_id: str) -> Counter[StateType]:
