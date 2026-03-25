@@ -19,6 +19,10 @@ class SimulationJob(BaseModel):
     environment: dict[str, str] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
+    @property
+    def display_name(self) -> str:
+        return f"{self.technology.name.upper()}-{self.sizing_strategy.cli_value} {self.site_id}"
+
 
 class SimulationResult(BaseModel):
     model_config = ConfigDict(extra="forbid")

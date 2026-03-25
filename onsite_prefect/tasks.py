@@ -31,7 +31,7 @@ _ACTIVE_PROCESS_GROUPS_LOCK = threading.Lock()
 
 @task(
     name="run-simulation",
-    task_run_name="run-simulation {job.technology.name} {job.sizing_strategy.cli_value} {job.site_id}",
+    task_run_name="{job.display_name}",
     retries=0,
     persist_result=False,
 )
@@ -50,12 +50,7 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
     )
 
     if not job.overwrite_existing_results and job_has_existing_remote_result(job):
-        await _persist_current_task_run_state(
-            Cancelled(message=f"Skipped site_id={job.site_id} because results already exist in MinIO."),
-            logger,
-        )
-        logger.info("Skipping site_id=%s because results already exist in MinIO.", job.site_id)
-        return SimulationResult(
+        skipped_result = SimulationResult(
             site_id=job.site_id,
             status="skipped",
             return_code=0,
@@ -63,6 +58,13 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
             duration_seconds=time.monotonic() - started_at,
             uploaded_count=0,
         )
+        cancelled_state = Cancelled(
+            message=f"Skipped site_id={job.site_id} because results already exist in MinIO.",
+            data=skipped_result,
+        )
+        await _persist_current_task_run_state(cancelled_state, logger)
+        logger.info("Skipping site_id=%s because results already exist in MinIO.", job.site_id)
+        return cancelled_state
 
     removed_before_run = remove_local_result_files(job)
     if removed_before_run:
@@ -146,14 +148,7 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
 
     local_result_files = iter_local_result_files(job)
     if not local_result_files:
-        await _persist_current_task_run_state(
-            Cancelled(
-                message=f"Simulation completed for site_id={job.site_id} without result files.",
-            ),
-            logger,
-        )
-        logger.info("Simulation completed for site_id=%s without result files.", job.site_id)
-        return SimulationResult(
+        skipped_result = SimulationResult(
             site_id=job.site_id,
             status="skipped",
             return_code=return_code,
@@ -161,6 +156,13 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
             duration_seconds=duration_seconds,
             uploaded_count=0,
         )
+        cancelled_state = Cancelled(
+            message=f"Simulation completed for site_id={job.site_id} without result files.",
+            data=skipped_result,
+        )
+        await _persist_current_task_run_state(cancelled_state, logger)
+        logger.info("Simulation completed for site_id=%s without result files.", job.site_id)
+        return cancelled_state
 
     uploaded_count = 0
     for local_result_file in local_result_files:
@@ -404,7 +406,7 @@ def _process_exists(process_group_id: int) -> bool:
 
 
 def _build_task_run_name(job: SimulationJob) -> str:
-    return f"run-simulation {job.technology.name} {job.sizing_strategy.cli_value} {job.site_id}"
+    return job.display_name
 
 
 async def _persist_current_task_run_name(job: SimulationJob, logger) -> None:
