@@ -5,6 +5,8 @@ services:
     hostname: ${ONSITE_WORKER_HOSTNAME:?Set ONSITE_WORKER_HOSTNAME for this worker host}
     mac_address: ${ONSITE_WORKER_MAC_ADDRESS:?Set ONSITE_WORKER_MAC_ADDRESS for this worker host}
     restart: unless-stopped
+    extra_hosts:
+      - "bball-130449.nrel.gov=10.40.18.65"
     environment:
       PREFECT_API_URL: ${PREFECT_API_URL:-http://bball-130449.nrel.gov:4200/api}
       PREFECT_WORK_POOL: ${PREFECT_WORK_POOL:-julia-pool}
@@ -14,5 +16,5 @@ services:
       ONSITE_PROJECT_ROOT: /onsite-energy-analysis
     volumes:
       - ${ONSITE_HOST_REPO_PATH:-/home/aswindle/docker/onsite-energy/onsite-energy-analysis}:/onsite-energy-analysis
-      - ${ONSITE_HOST_DATA_PATH:-/home/aswindle/docker/onsite-energy/iedo00onsite_data}:/data:ro
+      - ${ONSITE_HOST_DATA_PATH:-/home/aswindle/docker/onsite-energy/iedo00onsite_data}:/data
       - ${ONSITE_HOST_JULIA_CACHE_PATH:-/home/aswindle/docker/onsite-energy/julia-cache}:/root/.julia

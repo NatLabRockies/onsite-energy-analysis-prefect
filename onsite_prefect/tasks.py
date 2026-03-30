@@ -156,12 +156,13 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
             duration_seconds=duration_seconds,
             uploaded_count=0,
         )
+        message=f"Simulation completed for site_id={job.site_id} without result files."
         cancelled_state = Cancelled(
-            message=f"Simulation completed for site_id={job.site_id} without result files.",
+            message=message,
             data=skipped_result,
         )
         await _persist_current_task_run_state(cancelled_state, logger)
-        logger.info("Simulation completed for site_id=%s without result files.", job.site_id)
+        logger.warning(message)
         return cancelled_state
 
     uploaded_count = 0
@@ -172,15 +173,12 @@ async def run_simulation(job: SimulationJob) -> SimulationResult:
         uploaded_count += 1
 
     remove_local_result_files(job)
+    message=f"Simulation completed for site_id={job.site_id} with {uploaded_count} uploaded result file(s)."
     await _persist_current_task_run_state(
-        Completed(message=f"Simulation completed for site_id={job.site_id} with {uploaded_count} uploaded result file(s)."),
+        Completed(message=message),
         logger,
     )
-    logger.info(
-        "Simulation completed for site_id=%s with %s uploaded result file(s).",
-        job.site_id,
-        uploaded_count,
-    )
+    logger.info(message)
     return SimulationResult(
         site_id=job.site_id,
         status="completed",

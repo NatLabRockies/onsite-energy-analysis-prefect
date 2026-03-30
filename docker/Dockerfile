@@ -59,6 +59,6 @@ COPY onsite_prefect ./onsite_prefect
 COPY scripts ./scripts
 COPY docker/entrypoint.sh /opt/entrypoint.sh
 
-RUN chmod +x /opt/entrypoint.sh /opt/onsite-energy-analysis-prefect/scripts/bootstrap_prefect.sh
+RUN chmod +x /opt/entrypoint.sh
 
 ENTRYPOINT ["/opt/entrypoint.sh"]
