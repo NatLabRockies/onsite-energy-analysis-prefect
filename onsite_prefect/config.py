@@ -44,10 +44,10 @@ class Range(BaseModel):
 
 
 class SiteID(BaseModel):
-    model_config = ConfigDict(title="Site IDs", extra="forbid")
+    model_config = ConfigDict(title="Parcel LIDs", extra="forbid")
 
     site_ids: list[str] = Field(
-        title="Site IDs",
+        title="Parcel LIDs",
         min_length=1,
     )
 

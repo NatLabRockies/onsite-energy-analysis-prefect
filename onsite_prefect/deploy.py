@@ -5,9 +5,9 @@ from prefect.client.schemas.schedules import CronSchedule
 from prefect.exceptions import ObjectNotFound
 from prefect.types.entrypoint import EntrypointType
 
-from .flows import dispatch_simulations
-from .maintenance import cleanup_task_scheduler_storage
-from .task_storage import ensure_task_scheduling_storage_block
+from onsite_prefect.flows import dispatch_simulations
+from onsite_prefect.maintenance import cleanup_task_scheduler_storage
+from onsite_prefect.task_storage import ensure_task_scheduling_storage_block
 
 
 def apply_deployment(flow, *, name: str, work_pool_name: str, **deployment_kwargs) -> None:
