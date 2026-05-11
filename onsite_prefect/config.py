@@ -66,9 +66,13 @@ class Config(BaseModel):
         default=False,
         json_schema_extra={"position": 2},
     )
+    calculate_emissions: bool = Field(
+        default=False,
+        json_schema_extra={"position": 3},
+    )
     sites: Range | SiteID = Field(
         default_factory=Range,
-        json_schema_extra={"position": 3},
+        json_schema_extra={"position": 4},
     )
 
 

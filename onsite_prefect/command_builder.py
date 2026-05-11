@@ -117,8 +117,10 @@ def build_simulation_job(site_id: str, config: Config) -> SimulationJob:
         str(runtime.script_path),
         "--option",
         config.sizing_strategy.cli_value,
-        "--match-ids",
+        "--ids",
         site_id,
+        "--emissions",
+        str(config.calculate_emissions).lower(),
         "--workers",
         "0",
     ]
