@@ -12,10 +12,12 @@ from prefect.client.schemas.objects import StateType
 from prefect.context import get_run_context
 from prefect.exceptions import ObjectNotFound
 from prefect.states import Cancelled, Completed, Failed, Running
+from pydantic import ValidationError
 
 from .command_builder import iter_local_result_files, remove_local_result_files, result_key_for_local_file
 from .jobs import SimulationJob, SimulationResult
 from .minio import job_has_existing_remote_result, upload_result_file
+from .task_storage import get_task_scheduling_storage_block_slug
 
 RUN_SIMULATION_TASK_KEY = "run_simulation"
 RUN_LIFECYCLE_POLL_SECONDS = float(os.environ.get("ONSITE_RUN_LIFECYCLE_POLL_SECONDS", "10"))
@@ -29,11 +31,38 @@ _ACTIVE_PROCESS_GROUPS: dict[int, str] = {}
 _ACTIVE_PROCESS_GROUPS_LOCK = threading.Lock()
 
 
+def _run_simulation_cache_key(_task_context, parameters: dict[str, object]) -> str | None:
+    raw_job = parameters.get("job")
+    if isinstance(raw_job, SimulationJob):
+        job = raw_job
+    elif isinstance(raw_job, dict):
+        try:
+            job = SimulationJob.model_validate(raw_job)
+        except ValidationError:
+            return None
+    else:
+        return None
+
+    if job.overwrite_existing_results:
+        return None
+
+    return "/".join(
+        (
+            RUN_SIMULATION_TASK_KEY,
+            job.technology.name,
+            job.sizing_strategy.cli_value,
+            job.site_id,
+        )
+    )
+
+
 @task(
     name="run-simulation",
     task_run_name="{job.display_name}",
+    cache_key_fn=_run_simulation_cache_key,
     retries=0,
-    persist_result=False,
+    persist_result=True,
+    result_storage=get_task_scheduling_storage_block_slug(),
 )
 async def run_simulation(job: SimulationJob) -> SimulationResult:
     logger = get_run_logger()
