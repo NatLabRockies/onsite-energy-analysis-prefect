@@ -10,7 +10,7 @@ from pydantic.experimental.missing_sentinel import MISSING
 class Technology(str, Enum):
     lfr = "CSP: Linear Fresnel Reflector"
     ptc = "CSP: Parabolic Trough Collector"
-    pt = "CSP: Power Tower"
+    # pt = "CSP: Power Tower"
     pv = "PV"
     wind = "Wind"
 

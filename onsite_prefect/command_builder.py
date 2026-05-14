@@ -56,12 +56,12 @@ TECHNOLOGY_RUNTIMES: dict[Technology, TechnologyRuntime] = {
         results_subdirectory="trough",
         output_filename_suffix="trough",
     ),
-    Technology.pt: TechnologyRuntime(
-        working_directory=get_code_root() / "csp_tech_potential",
-        script_path=get_code_root() / "csp_tech_potential" / "pt-csp_parallelized.jl",
-        results_subdirectory="mst",
-        output_filename_suffix="pt",
-    ),
+    # Technology.pt: TechnologyRuntime(
+    #     working_directory=get_code_root() / "csp_tech_potential",
+    #     script_path=get_code_root() / "csp_tech_potential" / "pt-csp_parallelized.jl",
+    #     results_subdirectory="mst",
+    #     output_filename_suffix="pt",
+    # ),
     Technology.pv: TechnologyRuntime(
         working_directory=get_code_root() / "pv_tech_potential",
         script_path=get_code_root() / "pv_tech_potential" / "run_scenarios_onsite_v2.jl",
